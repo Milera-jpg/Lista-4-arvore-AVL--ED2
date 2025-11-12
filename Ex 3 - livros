@@ -1,0 +1,303 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdbool.h>
+#include <stddef.h>
+
+typedef struct AVLNode{
+    int key;
+    int height; //verifica o balanceamento atravez da altura
+    struct AVLNode *left;
+    struct AVLNode *right;
+}AVLNode; //arvore
+
+typedef struct{
+    AVLNode *root;
+    size_t size;
+}AVLTree;
+
+static int Max(int a, int b){
+    return a>b ? a: b; 
+    //ternario - a>b se sim retorna a, senao b
+}
+
+static int Height(AVLNode *n){
+    return n ? n->height : 0; 
+    //n existe? se sim retorna n, senao 0
+}
+
+static int Balance_factor(AVLNode *n){
+    return n? Height(n->left) - Height(n->right) : 0; 
+    //verifica se esta balanceada
+    //positivo esquerda maior
+    //negativo direita maior
+}
+
+static AVLNode* Make_node(int key){
+    AVLNode *n = (AVLNode*)malloc(sizeof(AVLNode));
+    if (!n){
+        perror("malloc");
+        exit(EXIT_FAILURE);
+    }
+    n->key = key;
+    n->height = 1;
+    n->left = n->right = NULL;
+    return n;
+}
+
+static void Free_node(AVLNode *n){
+    if(!n) return;
+    Free_node(n->left);
+    Free_node(n->right);
+    free(n);
+}
+
+static AVLNode* Rotate_right(AVLNode *y){
+    AVLNode *x = y->left;
+    AVLNode *aux = x->right;
+    
+    x->right = y;
+    y->left = aux;
+    
+    y->height = 1+Max(Height(y->left), Height(y->right));
+    x->height = 1+Max(Height(x->left), Height(x->right));
+    return x;
+    
+}
+
+static AVLNode* Rotate_left(AVLNode *x){
+    AVLNode *y = x->right;
+    AVLNode *aux = y->left;
+    
+    y->left = x;
+    x->right = aux;
+    
+    x->height = 1+Max(Height(x->left), Height(x->right));
+    y->height = 1+Max(Height(y->left), Height(y->right));
+    return y;
+}
+
+//reBalanceamento
+static AVLNode* Balance(AVLNode *n){
+    if(!n) return NULL;
+    n->height = 1+Max(Height(n->left), Height(n->right));
+    int balanceFactor = Balance_factor(n); //se 1 balanceada
+    
+    //analizando no a no
+    //esquerda - esquerda
+    if(balanceFactor>1 && Balance_factor(n->left) >= 0){
+        printf("Rotação simples -> direita!\n");
+        return Rotate_right(n);
+    }
+
+    //esquerda - direita
+    if(balanceFactor>1 && Balance_factor(n->left) < 0){
+        n->left = Rotate_left(n->left);
+        printf("Rotação dupla -> esq + dir !\n");
+        return Rotate_right(n);
+    }
+    //direita - direita
+    if(balanceFactor < -1 && Balance_factor(n->right) <= 0){
+        printf("Rotação simples -> esquerda!\n");
+        return Rotate_left(n);
+    }
+
+    //direita - esquerda
+    if(balanceFactor < -1 && Balance_factor(n->right) > 0){
+        n->right = Rotate_left(n->right);
+        printf("Rotação simples -> dir + esq!\n");
+        return Rotate_left(n);
+    }
+    return n;
+}
+
+static AVLNode* Insert_recursive(AVLNode *node, int key, bool *inserted){
+    if(!node){
+        *inserted = true; //verifica se inseriu
+        return Make_node(key);
+    }
+    if(key < node->key) //é menor
+        node->left = Insert_recursive(node->left, key, inserted);
+    else if(key > node->key)
+        node->right = Insert_recursive(node->right, key, inserted);
+    else return node;
+    
+    return Balance(node);
+}
+
+//procura o menor nó
+static AVLNode* Min_node(AVLNode *n){
+    while (n && n->left) n = n->left; 
+    return n;
+}
+
+//remover o no - se for raiz coloca o menor dos maiores no lugar
+static AVLNode* Remove_recursiv(AVLNode *node, int key, bool *removed){
+    if(!node) return NULL;
+    
+    if(key < node->key){
+        node->left = Remove_recursiv(node->left, key, removed);
+    }
+    else if(key > node->key){
+        node->right = Remove_recursiv(node->right, key, removed);
+    }else{
+        *removed = true;
+        
+        //removendo pai com 1 ou 0 filho
+        if(!node->left || !node->right){
+            AVLNode *tmp = node->left ? node->left : node->right; 
+            if(!tmp){
+                //0 filho
+                free(node);
+                return NULL;
+            }else{
+                //1 filho
+                *node = *tmp;
+            }
+        }else{
+            //pai com 2 filhos
+            AVLNode *sucessor = Min_node(node->right);
+            node->key = sucessor->key;
+            node->right = Remove_recursiv(node->right, sucessor->key, removed);
+        }
+    }
+    return Balance(node);
+}
+
+static bool Search_recursive(AVLNode *n, int key){
+    if(!n) return false;
+    if(key == n->key) return true;
+    // se chave menor - esquerda, se maior - direita 
+    return key < n->key ? Search_recursive(n->left, key) : Search_recursive(n->right, key);
+}
+
+static void In_order_print(AVLNode *n){
+//recursiva
+    if(!n) return;
+    In_order_print(n->left);
+    printf("%d ",n->key);
+    In_order_print(n->right);
+}
+
+static void Pre_order_print(AVLNode *n){
+    if(!n) return;
+    printf("%d ",n->key);
+    Pre_order_print(n->left);
+    Pre_order_print(n->right);
+}
+
+static void Post_order_print(AVLNode *n){
+    if(!n) return;
+    Post_order_print(n->left);
+    Post_order_print(n->right);
+    printf("%d ",n->key);
+}
+
+static void Print_recursiv(AVLNode *n, int depth, char branch){ //profundidade, galho
+    if(!n) return;
+    Print_recursiv(n->right, depth+1, '/');
+    for(int i = 0;i < depth; i++){
+        printf("\t");
+    }
+    if(depth) printf("%c",branch);
+    printf("%d (h=%d)\n",n->key, n->height);
+    Print_recursiv(n->left, depth+1, '\\');
+}
+
+//funçoes publicas
+void Avl_print_inorder(const AVLTree *t){
+    In_order_print(t ? t->root : NULL);
+}
+
+void Avl_print_preorder(const AVLTree *t){
+    Pre_order_print(t ? t->root : NULL);
+}
+
+void Avl_print_postorder(const AVLTree *t){
+    Post_order_print(t ? t->root : NULL);
+}
+
+AVLTree* Avl_create(void){
+    AVLTree *t = (AVLTree*)malloc(sizeof(AVLTree));
+    if(!t) {
+        perror("malloc");
+        exit(EXIT_FAILURE);
+    }
+    t->root = NULL;
+    t->size = 0;
+    return t;
+}
+
+void Avl_destroy(AVLTree *t){
+    if(!t) return;
+    Free_node(t->root);
+    free(t);
+} 
+
+bool Avl_insert(AVLTree *t, int key){
+    bool inserted = false;
+    t->root = Insert_recursive(t->root,key, &inserted);
+    if(inserted) t->size++;
+    return inserted;
+}
+
+bool Avl_remove(AVLTree *t, int key){
+    bool removed = false;
+    t->root = Remove_recursiv(t->root, key, &removed);
+    if(removed) t->size--;
+    return removed;
+}
+
+bool Avl_search(const AVLTree *t, int key){
+    return Search_recursive(t ? t->root : NULL, key);
+}
+
+size_t Avl_size(const AVLTree *t){
+    return t ? t->size : 0;
+}
+
+void Avl_print(const AVLTree *t){
+    if(!t || !t->root) {
+        printf("Arvore vazia\n"); 
+        return;
+    }
+    Print_recursiv(t->root, 0, '-');
+}
+
+//novas funçoes para o exercicio
+int Avl_height(const AVLTree *t){
+    return Height(t ? t->root : NULL);
+}
+int Avl_balance_factor(const AVLTree *t){
+    return Balance_factor(t ? t->root : NULL);
+}
+void Avl_print_node_balances(const AVLTree *t){
+    printf("Fator de balanceamento: %d\n\n",Balance_factor(t ? t->root : NULL));
+}
+
+//main
+#include <stdio.h>
+#include "arvore.h"
+
+int main(){
+    AVLTree *prateleira = Avl_create();
+    int livros[] = {40, 20, 10, 25, 30, 22};
+    int tamanho = (int)(sizeof(livros)/sizeof(livros[0]));
+    
+    for(int i = 0; i < tamanho; i++){
+        printf("========================================\n");
+        printf("Guardando livro %d, código: %d\n", i+1, livros[i]);
+        printf("========================================\n");
+        
+        Avl_insert(prateleira, livros[i]);
+        
+        printf("Altura: %d\n", Avl_height(prateleira));
+        Avl_balance_factor(prateleira);
+        Avl_print_node_balances(prateleira);
+    }
+    
+    printf("--- Estrutura ---\n");
+    Avl_print(prateleira);
+        
+    Avl_destroy(prateleira);
+    return 0;
+}
